@@ -1,0 +1,8 @@
+# motd-role.yml
+---
+- name: use motd role
+  hosts: seoul
+  remote_user: ansible-user
+  become: true
+  roles:
+    - motd

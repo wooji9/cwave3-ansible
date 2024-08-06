@@ -1,0 +1,8 @@
+# lineinfile.yaml
+- name: Add a new line before the matching pattern/line.
+  hosts: servera
+  tasks:
+    - name: Add a new line
+      lineinfile:
+        path: /etc/hosts
+        line: '10.178.0.7 windows.example.com'

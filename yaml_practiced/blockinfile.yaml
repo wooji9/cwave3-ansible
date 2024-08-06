@@ -1,0 +1,11 @@
+# blockinfile.yaml
+- name: block test
+  hosts: seoul
+  tasks:
+    - name: block test
+      blockinfile:
+        path: /home/ansible-user/ansible/index.html
+        block: |
+          Welcome to the Hello world.
+          Show your ability in Hello world.
+        state: present

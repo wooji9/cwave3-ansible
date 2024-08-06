@@ -1,0 +1,145 @@
+# creat_k8s.yaml
+
+- name: kubernetes install play
+  
+  hosts: all
+  #gather_facts: false
+  
+  vars:
+    controlplane_IP: "172.16.0.201"
+    TOKEN: "kdigit.1234567890hellow"
+            #after 24H expire
+    kube_config_dir: "/etc/kubernetes"
+  tasks:
+
+  - name: 1.kernel module enable
+    modprobe:
+      name: "{{ item }}"
+      state: present
+      persistent: present
+    loop:
+     - br_netfilter
+     - overlay
+
+
+  - name: 2.sysctl configuration
+    sysctl:
+      name:  "{{ item }}"
+      value: "1"
+      reload: yes
+      sysctl_file: /etc/sysctl.d/k8s.conf
+      sysctl_set: yes
+    loop:
+     - net.bridge.bridge-nf-call-ip6tables
+     - net.bridge.bridge-nf-call-iptables
+     - net.ipv4.ip_forward
+
+
+  - name: 3.permissive selinux
+    ansible.posix.selinux:
+      policy: targeted
+      state: permissive #비활성화 되었으나 로그는 남음
+
+      #state: disabled
+      #로그도 남지 않게 꺼버림
+
+
+  - name: 4.disable firewalld
+    service:
+      name: firewalld
+      state: stopped
+      enabled: false #cannot abled again
+
+
+  - name: 5-1.remove swap
+    shell: swapoff -a
+    when: ansible_swaptotal_mb > 0
+
+  - name: 5-2.remove swap from fstab
+    mount:
+      name: none
+      fstype: swap
+      state: absent
+
+
+  - name: 6.download docker repository
+    get_url:
+      url: https://download.docker.com/linux/centos/docker-ce.repo
+      dest: /etc/yum.repos.d/docker-ce.repo
+
+
+  - name: 7.add k8s repository
+    yum_repository:
+      name: k8s_repo
+      description: k8s_repo made by ansible
+      baseurl: https://pkgs.k8s.io/core:/stable:/v1.30/rpm/
+      enabled: yes
+      gpgcheck: yes
+      repo_gpgcheck: yes
+      gpgkey:
+      - https://pkgs.k8s.io/core:/stable:/v1.30/rpm/repodata/repomd.xml.key
+
+
+  - name: 8.install kublet, containerd
+    yum: 
+      name: "{{ item }}"
+      state: latest
+    loop:
+      - containerd
+      - kubeadm
+      - kubelet
+
+  - name: 9.copy container config file
+    copy:
+      src: config.toml
+      dest: /etc/containerd/config.toml
+
+
+  - name: 10.enable service kubelet and cotnainerd
+    service:
+      name: "{{ item }}"
+      state: started
+      enabled: true
+    loop:
+    - containerd
+    - kubelet
+
+  - name: 11.copy /etc/hosts
+    copy:
+      src: /etc/hosts
+      dest: /etc/hosts
+
+
+  - name: 12.Check if kubelet.conf exists
+    stat:
+      path: "{{ kube_config_dir }}/kubelet.conf"
+      get_attributes: no
+      get_checksum: no
+      get_mime: no
+    register: kubelet_conf
+
+
+  - name: 13.init cluster
+    shell: |
+     kubeadm init --apiserver-advertise-address={{ controlplane_IP }} \
+                   --pod-network-cidr=192.168.0.0/16 \
+                   --token={{ TOKEN }}
+    when: inventory_hostname in groups['controlplanes'] and (not kubelet_conf.stat.exists)
+    ignore_errors: yes
+
+
+  - name: 14.join cluster
+    shell: |
+      kubeadm join --token={{ TOKEN }} \
+                   --discovery-token-unsafe-skip-ca-verification \
+                   {{ controlplane_IP }}:6443
+    when: inventory_hostname in groups['worker_nodes'] and (not kubelet_conf.stat.exists)
+
+
+  - name: 15.Copy admin config file from master
+    become: true
+    fetch:
+      src: /etc/kubernetes/admin.conf
+      dest: "{{ REMOTE_USER }}/.kube/config"
+      flat: yes
+    when: inventory_hostname in ['controlplane']

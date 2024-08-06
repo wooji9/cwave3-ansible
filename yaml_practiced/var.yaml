@@ -1,0 +1,9 @@
+# var.yaml
+---
+- name: var file practice
+  hosts: busan
+  tasks:
+  - name: show various Ansible facts
+    debug:
+      msg: >
+        The seoul of package is {{ pck }}

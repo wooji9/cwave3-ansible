@@ -1,0 +1,2 @@
+# motd/defaults/main.yml
+system_manager: admin@example.com

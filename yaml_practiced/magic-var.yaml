@@ -1,0 +1,8 @@
+# magic-var.yaml
+---
+- hosts: seoul
+  become: true
+  tasks:
+    - name: Show ansible_facts
+      debug:
+        var: hostvars['servera']['ansible_all_ipv4_addresses']
